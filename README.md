@@ -1,1 +1,1 @@
-# SentimentAnalysisKivyApp
+# Sentiment Analysis Kivy Application
