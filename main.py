@@ -1,30 +1,101 @@
+# -*- coding: utf-8 -*-
 from nltk.corpus import stopwords
 from bs4 import BeautifulSoup
 import requests
 import kivy
 import re
 import pickle
-import pandas as pd
-from sklearn.feature_extraction.text import CountVectorizer
 from kivy.app import App
 from kivy.uix.textinput import TextInput
 from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.uix.label import Label
+from kivy.uix.bubble import Bubble
 from kivy.uix.gridlayout import GridLayout
 from kivy.animation import Animation
 from kivy.core.window import Window
 from kivy.uix.pagelayout import PageLayout
+from kivy.lang import Builder
+from kivy.core.clipboard import Clipboard, CutBuffer
+import webbrowser
+import time
 
-#Window.size = (300, 480)
+Window.keyboard_anim_args = {'d': 2, 't': 'in_out_expo'}
+Window.softinput_mode = "below_target"
+
+Builder.load_string("""
+#:import Clipboard kivy.core.clipboard.Clipboard
+
+<PageLayout>:
+    name:"pagelayout"
+    border: '20dp'
+    
+    BoxLayout: 
+        orientation: 'vertical'      
+        
+        Button:
+        	text:"Amazon'a Git"
+        	on_release: app.amazon()
+        	size_hint: (1,.1)
+        	
+        AsyncImage: 
+            source: 'rsz_amazonnn.png'
+        
+        Button: 
+            text: 'Yapıştır'
+            size_hint: (1,.15)
+            on_release: root.ids.address.text = app.passte()
+             
+        TextInput:
+            id: address
+            hint_text: 'Ürün Adresini Yazınız...'
+            size_hint: (1,.1)
+            multiline: False
+            on_text: app.process()
+            
+        Button: 
+            text: 'Analiz'
+            size_hint: (1,.15)
+            on_release: app.Tahmin()
+        Button:
+            text: 'Temizle'
+            size_hint: (1,.1)
+            on_release: app.Temizle()
+        
+    BoxLayout: 
+        canvas: 
+            Color: 
+                rgba: 255 / 255., 161 / 255., 2 / 255., 1
+            Rectangle: 
+                pos: self.pos 
+                size: self.size
+        
+        orientation: 'vertical'
+            
+        Label: 
+            text: "Yapay Zeka ile Amazon Ürün Analizi v.0.1"
+	""")
 kivy.require('1.9.0')
-
+    
 class MultipleLayout(PageLayout):
     pass
-        
+
 class ÜrünAnaliziApp(App):
     def build(self):
         return MultipleLayout()
+    
+    def _ensure_clipboard(self):
+    	global Clipboard, CutBuffer
+    	if not Clipboard:
+    		from kivy.core.clipboard import Clipboard, CutBuffer
+           
+    def passte(self):
+    	self._ensure_clipboard
+    	data = Clipboard.paste()
+    	return data
+    		
+    def amazon(self):
+    	webbrowser.open('https://www.amazon.com.tr/')
     
     def process(self): 
         urun = self.root.ids.address.text 
@@ -32,20 +103,11 @@ class ÜrünAnaliziApp(App):
     
     def Temizle(self):
         self.root.ids.address.text  = ''
-    
-    def Analiz_animasyon(self, widget, *args):
-        a = Animation(background_color=(1,2,0,1))
-        a.start(widget)
         
     def Model(self, veri):
-        df2 = pd.read_csv("bnn.csv")
-        X = df2["Görüş"].values.astype('U')
-        self.c = CountVectorizer()
-        X = self.c.fit_transform(X)
-
-        file_name = "mNB"
-        loaded = pickle.load(open(file_name, 'rb'))
-        yorumlar_vektor = self.c.transform(veri)
+        c = pickle.load(open("count_vect", 'rb'))
+        loaded = pickle.load(open("mNB_Kivy", 'rb'))
+        yorumlar_vektor = c.transform(veri)
         predx = loaded.predict(yorumlar_vektor)
         y_pred = [1 if i > 0.5 else 0 for i in predx]
 
@@ -79,6 +141,7 @@ class ÜrünAnaliziApp(App):
             for i in range(len(texts)):
                 liste.append(str([texts[i].find('span').text.strip()]))
                 #print(texts[i].find('span').text.strip())
+            time.sleep(0.5)
             
             if len(liste_uzunlugu) > 0 and liste_uzunlugu.count(liste_uzunlugu[len(liste_uzunlugu)-1]) > 1:
                 break
@@ -113,27 +176,24 @@ class ÜrünAnaliziApp(App):
         self.url = self.process()
         layout = GridLayout(cols = 1, padding = 0)
         layout.text_size: (10,100)
-        kapat = Button(text='Tamam', on_press=self.Analiz_animasyon, size_hint=(25, None), size=(50, 30))
-        kapat.font_size= 13
+        kapat = Button(text='Tamam', size_hint=(1,.1))
 
         if self.url.strip() == "":
-            popupLabel = Label(text = "Lütfen Ürün Adresini Yazınız!") 
-            popupLabel.font_size=13
+            popupLabel = Label(text = "Lütfen Ürün Adresini Yazınız!")
             layout.add_widget(popupLabel)
             layout.add_widget(kapat)
             
-            pop = Popup(title='Uyarı',content=layout, size_hint=(None, None), size=(200, 200), auto_dismiss= False)
+            pop = Popup(title='Uyarı',content=layout, auto_dismiss= False)
             pop.open()
             kapat.bind(on_press=pop.dismiss)
             
         elif ".com" not in self.url:
             popupLabel = Label(text = "Lütfen Uygun Bir Adres Girin!") 
-            popupLabel.font_size=13
 
             layout.add_widget(popupLabel)
             layout.add_widget(kapat)
             
-            pop = Popup(title='Hata',content=layout, size_hint=(None, None), size=(200, 200), auto_dismiss= False)
+            pop = Popup(title='Hata',content=layout, auto_dismiss= False)
             pop.open()
             kapat.bind(on_press=pop.dismiss)
 
@@ -141,12 +201,11 @@ class ÜrünAnaliziApp(App):
             gorusler = self.Veri(self.url.strip())
             if len(gorusler) == 0:
                 popupLabel = Label(text = "Seçilen Üründe Yorum Bulunmamaktadır!") 
-                popupLabel.font_size=13
 
                 layout.add_widget(popupLabel)
                 layout.add_widget(kapat)
                 
-                pop = Popup(title='Uyarı',content=layout, size_hint=(None, None), size=(200, 200), auto_dismiss= False)
+                pop = Popup(title='Uyarı', content=layout, auto_dismiss= False)
                 pop.open()
                 kapat.bind(on_press=pop.dismiss)
 
@@ -164,7 +223,4 @@ class ÜrünAnaliziApp(App):
                 kapat.bind(on_press=pop.dismiss)
 
     
-    
-if __name__ == "__main__":  
-    MlApp = ÜrünAnaliziApp() 
-    MlApp.run()
+ÜrünAnaliziApp().run()
